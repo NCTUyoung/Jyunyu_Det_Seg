@@ -72,6 +72,7 @@ def get_arguments():
     parser.add_argument("-iv", dest = "input_video", type = str, required = True, help = "Input video for demo.")
     parser.add_argument("-ot", dest = "od_threshold",  type = float, default = 0.3, help = "Detection Confidence threshold.")
     parser.add_argument("-ov", dest = "output_video", action = "store_true", help = "Input video for demo.")
+    parser.add_argument("-camera", dest = "camera", action = "store_true", help = "Input video for demo.")
     return parser.parse_args()
 
 
@@ -351,7 +352,10 @@ def lane_post_process_find_mid(pred_seg, prob_map, pred_seg_max, img_draw, q):
             x, y = cluster_xy[:, 0], poly(cluster_xy[:, 0])
             # draw.ax4.plot(cluster_xy[:, 0], poly(cluster_xy[:, 0]), color = color_polate_4cls[cluster_class], linewidth = 2)
         else:
-            x, y = cluster_xy[:, 0], cluster_xy[:, 1]
+            poly_parameter = np.polyfit(cluster_xy[:,1], cluster_xy[:, 0], order)
+            poly = np.poly1d(poly_parameter)
+            # x, y = cluster_xy[:, 0], poly(cluster_xy[:, 0])
+            x, y = poly(cluster_xy[:, 1]), cluster_xy[:, 1]
             # draw.ax4.plot(cluster_xy[:, 0], cluster_xy[:, 1], color = color_polate_4cls[cluster_class], linewidth = 2)
         # if i == 0:
         #     ppen = pg.mkPen(color= color_polate_4cls_QT[cluster_class], width= 2)
@@ -572,8 +576,10 @@ if __name__ == "__main__":
     # v1
     q = multiprocessing.Queue()
     assert os.path.exists(args.input_video), "Input video {} does not exist.".format(args.input_video)
-    cap = cv2.VideoCapture(args.input_video)
-    # cap = cv2.VideoCapture(0)
+    if not args.camera:
+        cap = cv2.VideoCapture(args.input_video)
+    else:
+        cap = cv2.VideoCapture(0)
     softmax = torch.nn.Softmax(dim = 1)
     t = threading.Thread(target=main_process, args=(cap, test_dataset,softmax, q))
     t.start()

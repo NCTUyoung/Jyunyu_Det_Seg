@@ -42,9 +42,9 @@ wmin = 100
 pg.setConfigOptions(imageAxisOrder = "row-major")
 pick_interval = 8
 min_distance_threshold = 50
-# pick_interval = 1
-# min_distance_threshold = 6
-numbef_of_split = 20
+min_angle_threshold = 60
+
+LINE_WIDTH = 2
 
 color_polate_4cls = {1: "#00FF00",
                      2: "#0000FF",
@@ -71,6 +71,7 @@ def get_arguments():
     parser.add_argument("-iv", dest = "input_video", type = str, required = True, help = "Input video for demo.")
     parser.add_argument("-ot", dest = "od_threshold",  type = float, default = 0.3, help = "Detection Confidence threshold.")
     parser.add_argument("-ov", dest = "output_video", action = "store_true", help = "Input video for demo.")
+    parser.add_argument("-camera", dest = "camera", action = "store_true", help = "Input video for demo.")
     return parser.parse_args()
 
 
@@ -302,7 +303,7 @@ def lane_post_process_find_mid(pred_seg, prob_map, pred_seg_max, img_draw, q):
             # print("angle min_distance", angle, min_distance)
             # if (min_distance < min_distance_threshold):
             if (min_distance < min_distance_threshold and angle is None) or\
-               (min_distance < min_distance_threshold and angle < 30 and angle is not None):
+               (min_distance < min_distance_threshold and angle < min_angle_threshold and angle is not None):
                 # print("add to cluster")
                 new_unit_vector = get_unit_vector((point_x, y_value),(sampled_points_info[min_distance_index][-1][0], sampled_points_info[min_distance_index][-1][1]))
                 if sampled_points_info[min_distance_index][-1][2] is not None:
@@ -349,7 +350,10 @@ def lane_post_process_find_mid(pred_seg, prob_map, pred_seg_max, img_draw, q):
             x, y = cluster_xy[:, 0], poly(cluster_xy[:, 0])
             # draw.ax4.plot(cluster_xy[:, 0], poly(cluster_xy[:, 0]), color = color_polate_4cls[cluster_class], linewidth = 2)
         else:
-            x, y = cluster_xy[:, 0], cluster_xy[:, 1]
+            poly_parameter = np.polyfit(cluster_xy[:,1], cluster_xy[:, 0], order)
+            poly = np.poly1d(poly_parameter)
+            # x, y = cluster_xy[:, 0], poly(cluster_xy[:, 0])
+            x, y = poly(cluster_xy[:, 1]), cluster_xy[:, 1]
             # draw.ax4.plot(cluster_xy[:, 0], cluster_xy[:, 1], color = color_polate_4cls[cluster_class], linewidth = 2)
         # if i == 0:
         #     ppen = pg.mkPen(color= color_polate_4cls_QT[cluster_class], width= 2)
@@ -389,14 +393,17 @@ def main_process(cap, dataset, softmax, q):
         while (cap.isOpened()):
             ret, frame = cap.read()
             if ret:
+                # if count < 2500:
+                #     count += 1 
+                #     continue
                 if count % skip_frame != 0:
                     count += 1
                     continue
                 else:
                     count += 1
+                start = time.time()
                 RGB = np.zeros((dataset.input_size[0], dataset.input_size[1], 3), dtype = np.uint8)
                 print("--------------------------")
-                start = time.time()
                 tic = time.time()
             
                 # resize image
@@ -442,10 +449,10 @@ def main_process(cap, dataset, softmax, q):
                 # binary_map = binary_map.astype(np.bool)
                 # prob map
                 prob_map = np.max(pred_seg[3:, :, :], axis = 0)
-                toc =time.time()
-                print("Pre-Post-process time: {}".format(toc - tic))
                 # segmentation prediction
                 pred_seg_max = np.argmax(pred_seg, axis = 0)
+                toc =time.time()
+                print("Pre-Post-process time: {}".format(toc - tic))
                 # squeeze dim
                 # pred_seg_max = np.squeeze(pred_seg_max)
                 # draw segmentation result
@@ -509,14 +516,27 @@ def main_process(cap, dataset, softmax, q):
                     y1 = int(round(bbox[1]))
                     x2 = int(round(bbox[2]))
                     y2 = int(round(bbox[3]))
-                    cv2.rectangle(img_draw_down, (x1,y1), (x2, y2),color = (0,0,0)) 
+                    # ped
+                    if class_ == 0 or class_ == 1:
+                        cv2.rectangle(img_draw_down, (x1,y1), (x2, y2), (0,255,0), LINE_WIDTH) 
+                    # car
+                    elif class_ == 2 or class_ == 3 or class_ == 4:
+                        cv2.rectangle(img_draw_down, (x1,y1), (x2, y2), (0,0,255), LINE_WIDTH) 
+                    # motor
+                    elif class_ == 5 or class_ == 6 or class_ == 7:
+                        cv2.rectangle(img_draw_down, (x1,y1), (x2, y2), (255,0,0),  LINE_WIDTH) 
+                    else:
+                        cv2.rectangle(img_draw_down, (x1,y1), (x2, y2), (0,0,0), LINE_WIDTH) 
                 toc = time.time()
                 print("Detection draw took: {}".format(toc - tic))
                 # self.lane_post_process(pred_seg, prob_map, pred_seg_max, img_draw_down)
                 # img_draw_down = img_draw_down.T
         
                 # self.img.setImage(img_draw_down, autoDownsample = False)
+                tic = time.time()
                 lane_post_process_find_mid(pred_seg, prob_map, pred_seg_max, img_draw_down, q)
+                toc = time.time()
+                print("Total lane post time: {}".format(toc - tic))
                 end = time.time()
                 print("Total time: {}".format(end - start))
 
@@ -570,8 +590,10 @@ if __name__ == "__main__":
     # v1
     q = multiprocessing.Queue()
     assert os.path.exists(args.input_video), "Input video {} does not exist.".format(args.input_video)
-    cap = cv2.VideoCapture(args.input_video)
-    # cap = cv2.VideoCapture(0)
+    if not args.camera:
+        cap = cv2.VideoCapture(args.input_video)
+    else:
+        cap = cv2.VideoCapture(0)
     softmax = torch.nn.Softmax(dim = 1)
     t = threading.Thread(target=main_process, args=(cap, test_dataset,softmax, q))
     t.start()
