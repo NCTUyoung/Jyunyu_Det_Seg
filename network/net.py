@@ -17,7 +17,7 @@ from network.Jacinto_detseg_v2 import Jacinto_detseg_v2
 # from network.Jacinto_seg_experiment import Jacinto_seg_cat1, Jacinto_seg_cat2, Jacinto_seg_add1, Jacinto_seg_inter
 from network.Jacinto_detseg_v2_binary import Jacinto_detseg_v2_binary
 from network.Jacinto_det_256x512_64_1 import JacintoNet_det_256x512_64_1, JacintoNet_det_256x512_64_1_retinanet, JacintoNet_det_256x512_64_1_retinanet_only_encoder
-from network.Jacinto_detseg_256x512 import Jacinto_detseg_256x512_v1, Jacinto_detseg_256x512_v4
+from network.Jacinto_detseg_256x512 import Jacinto_detseg_256x512_v1, Jacinto_detseg_256x512_v3, Jacinto_detseg_256x512_v4
 
 def net_option(name = "Res", pretrain = None , phase = "train", depth = 50, input_shape = [512, 1024],mode = "segmentation", normalize_anchor = False, \
                num_classes_OD = 3, num_classes_seg = 8, use_focal_loss = False):
@@ -86,6 +86,8 @@ def net_option(name = "Res", pretrain = None , phase = "train", depth = 50, inpu
         net = JacintoNet_det_256x512_64_1_retinanet_only_encoder()
     elif name == "Jacinto_256x512_v1":
         net = Jacinto_detseg_256x512_v1(num_classes_OD=num_classes_OD, num_classes_seg = num_classes_seg, pretrained=pretrain, mode = mode, use_focal_loss = use_focal_loss)
+    elif name == "Jacinto_256x512_v3":
+        net = Jacinto_detseg_256x512_v3(num_classes_OD=num_classes_OD, num_classes_seg = num_classes_seg, pretrained=pretrain, mode = mode, use_focal_loss = use_focal_loss)
     elif name == "Jacinto_256x512_v4":
         net = Jacinto_detseg_256x512_v4(num_classes_OD=num_classes_OD, num_classes_seg = num_classes_seg, pretrained=pretrain, mode = mode, use_focal_loss = use_focal_loss)
     else:

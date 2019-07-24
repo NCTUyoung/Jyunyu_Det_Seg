@@ -1,7 +1,7 @@
 build.py
-/home/nvidia/Jyunyu/nms_lib/vision.cpp
-/home/nvidia/Jyunyu/nms_lib/cpu/nms_cpu.cpp
-/home/nvidia/Jyunyu/nms_lib/cuda/nms.cu
+/home/nvidia/Jyunyu_copy/nms_lib/vision.cpp
+/home/nvidia/Jyunyu_copy/nms_lib/cpu/nms_cpu.cpp
+/home/nvidia/Jyunyu_copy/nms_lib/cuda/nms.cu
 torch_extension.egg-info/PKG-INFO
 torch_extension.egg-info/SOURCES.txt
 torch_extension.egg-info/dependency_links.txt
