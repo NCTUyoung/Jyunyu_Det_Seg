@@ -4,6 +4,8 @@ import sys
 
 ROOT_DIR = os.path.realpath(__file__).split("demo/demo_ROS.py")[0]
 sys.path.append(ROOT_DIR)
+
+import threading
 import numpy as np
 import cv2
 
@@ -30,7 +32,7 @@ from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
 
 
-import Queue
+from multiprocessing import  Queue
 
 ######################################
 # Global Parameter
@@ -83,13 +85,7 @@ device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 ######################################
 # Global Parameter
 ######################################
-net = net_option(model_type, mode = "end2end")
-net = net.to(device)
 
-skip_frame = 1
-count = 0
-net.target_available = False
-net.eval()
 
 
 
@@ -254,23 +250,35 @@ def get_unit_vector(point1, point2):
 
 
 class Img_Sub():
-	def __init__(self):
-		self.bridge = CvBridge()
-		self.image_sub = rospy.Subscriber("/usb_cam/image_raw",Image,self.callback)
-		self.q = Queue.LifoQueue()
-	def callback(self,data):
-		try:
-			cv_image = self.bridge.imgmsg_to_cv2(data, "rgb8")
-		except CvBridgeError as e:
-			print(e)
-		
-		
-		img = cv2.resize(cv_image, (INPUT_SHAPE[1], INPUT_SHAPE[0]), 0, 0, interpolation = cv2.INTER_LINEAR)
-		self.q.put(img.copy())
-def Segmentation_Det_task(img):
+    def __init__(self):
+        self.bridge = CvBridge()
+        self.image_sub = rospy.Subscriber("/usb_cam/image_raw",Image,self.update_image)
+        self.img =  None
+        self.image_lock = threading.RLock()
+    def callback(self,data):
+        
+        self.q.put(img.copy())
+    def update_image(self, data):
+        try:
+            cv_image = self.bridge.imgmsg_to_cv2(data, "rgb8")
+        except CvBridgeError as e:
+            print(e)
+        img = cv2.resize(cv_image, (INPUT_SHAPE[1], INPUT_SHAPE[0]), 0, 0, interpolation = cv2.INTER_LINEAR)
+
+        d = map(ord, img.data)
+        arr = np.ndarray(shape=img,
+                         dtype=np.int,
+                         buffer=np.array(d))[:,:,::-1]
+
+        if self.image_lock.acquire(True):
+            self.img = arr
+            self.image_lock.release()
+
+
+def Segmentation_Det_task(img,net):
     RGB = np.zeros(INPUT_SHAPE,dtype=np.uint8)
     #resize image
-    #img = cv2.resize(img, (INPUT_SHAPE[1], INPUT_SHAPE[0]), 0, 0, interpolation = cv2.INTER_LINEAR)
+    img = cv2.resize(img, (INPUT_SHAPE[1], INPUT_SHAPE[0]), 0, 0, interpolation = cv2.INTER_LINEAR)
     #BRG to RGB
     img = img[:,:,[2,1,0]]
     # transfrom and expand dim
@@ -343,35 +351,41 @@ def Segmentation_Det_task(img):
 
 def main():
 
-	
+    
+    net = net_option(model_type, mode = "end2end")
+    net = net.to(device)
 
+    skip_frame = 1
+    count = 0
+    net.target_available = False
+    net.eval()
 
-	######################################
-	# Load Model
-	######################################
+    ######################################
+    # Load Model
+    ######################################
 
-	# resume from checkpoint
-	assert os.path.exists(model_check_point), "Checkpoint {} does not exist.".format(model_check_point)
-	state = torch.load(model_check_point)
-	net.load_state_dict(state["model_state"])
-	bridge = CvBridge()
-	image_sub_node = Img_Sub()
-	image_pub_seg = rospy.Publisher("Jyuntu/seg",Image)
-	image_pub_seg_det = rospy.Publisher("Jyuntu/seg_det",Image)
+    # resume from checkpoint
+    assert os.path.exists(model_check_point), "Checkpoint {} does not exist.".format(model_check_point)
+    state = torch.load(model_check_point)
+    net.load_state_dict(state["model_state"])
+    bridge = CvBridge()
+    image_sub_node = Img_Sub()
+    image_pub_seg = rospy.Publisher("Jyuntu/seg",Image)
+    image_pub_seg_det = rospy.Publisher("Jyuntu/seg_det",Image)
 
-	rospy.init_node('Jyunyu_Det_seg', anonymous=True)
-	rate = rospy.Rate(10)
-	while not rospy.is_shutdown():
-		try:
-			img = image_sub_node.q.get()
-			seg_det,seg = Segmentation_Det_task(img)
-			image_pub_seg.publish(bridge.cv2_to_imgmsg(seg, "bgr8"))
-			image_pub_seg_det.publish(bridge.cv2_to_imgmsg(seg_det, "bgr8"))
-			rate.sleep()
-		except KeyboardInterrupt:
-			os.system('pkill -9 python')
-			print("Shutting down")
+    rospy.init_node('Jyunyu_Det_seg', anonymous=True)
 
-		
+    while not rospy.is_shutdown():
+        try:
+            img = image_sub_node.img
+            seg_det,seg = Segmentation_Det_task(img,net)
+            image_pub_seg.publish(bridge.cv2_to_imgmsg(seg, "bgr8"))
+            image_pub_seg_det.publish(bridge.cv2_to_imgmsg(seg_det, "bgr8"))
+        except KeyboardInterrupt:
+            os.system('pkill -9 python')
+            print("Shutting down")
+
+        
 if __name__ == '__main__':
-	main()	
+    main()    
+
