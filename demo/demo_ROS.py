@@ -252,7 +252,7 @@ def get_unit_vector(point1, point2):
 class Img_Sub():
     def __init__(self):
         self.bridge = CvBridge()
-        self.image_sub = rospy.Subscriber("/usb_cam/image_raw",Image,self.update_image)
+        self.image_sub = rospy.Subscriber("/panaroma2",Image,self.update_image)
         self.img =  None
         self.image_lock = threading.RLock()
     def callback(self,data):
